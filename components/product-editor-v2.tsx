@@ -1,0 +1,31 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { ImagePlus, Plus, Trash2 } from "lucide-react";
+import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Switch } from "./ui/switch";
+import { Textarea } from "./ui/textarea";
+import type { Product, ProductColor } from "../lib/catalog";
+
+export function ProductEditorV2({product,onClose,onSaved}:{product:Product|null;onClose:()=>void;onSaved:()=>void}) {
+  const [item,setItem]=useState<Product|null>(null); const [saving,setSaving]=useState(false); const [error,setError]=useState(""); const [uploading,setUploading]=useState("");
+  useEffect(()=>setItem(product?structuredClone(product):null),[product]);
+  if(!item)return null;
+  const updateColor=(index:number,patch:Partial<ProductColor>)=>setItem({...item,colors:item.colors.map((color,i)=>i===index?{...color,...patch}:color)});
+  async function upload(file:File,index?:number){setUploading(index===undefined?"main":String(index));setError("");const form=new FormData();form.append("file",file);const response=await fetch("/api/admin/upload",{method:"POST",body:form});const data=await response.json();if(!response.ok)setError(data.error);else if(index===undefined)setItem(current=>current?{...current,image:data.url}:current);else updateColor(index,{image:data.url});setUploading("")}
+  async function save(){setSaving(true);setError("");const response=await fetch("/api/admin/products",{method:item.id?"PUT":"POST",headers:{"content-type":"application/json"},body:JSON.stringify(item)});const data=await response.json();if(!response.ok)setError(data.error);else onSaved();setSaving(false)}
+  return <Dialog open onOpenChange={(open)=>!open&&onClose()}><DialogContent className="editor-dialog"><DialogHeader><DialogTitle>{item.id?"Editar producto":"Añadir producto"}</DialogTitle><DialogDescription>Gestiona la foto general y una foto unitaria para cada color.</DialogDescription></DialogHeader><div className="editor-grid">
+    <div className="image-editor"><img src={item.image||"/images/brand/lim-logo.png"} alt="Vista general"/><label><ImagePlus/> {uploading==="main"?"Subiendo…":"Cambiar foto general"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event)=>event.target.files?.[0]&&upload(event.target.files[0])}/></label><Input value={item.image} onChange={(event)=>setItem({...item,image:event.target.value})} placeholder="URL de foto general"/><p>Esta imagen sirve de respaldo si un color todavía no tiene su propia foto.</p></div>
+    <div className="editor-fields"><div className="two-cols"><div><Label>Nombre</Label><Input value={item.name} onChange={(event)=>setItem({...item,name:event.target.value,slug:item.id?item.slug:event.target.value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"")})}/></div><div><Label>SKU</Label><Input value={item.sku} onChange={(event)=>setItem({...item,sku:event.target.value.toUpperCase()})}/></div></div>
+      <div className="three-cols"><div><Label>Precio S/</Label><Input type="number" step="0.5" value={item.price} onChange={(event)=>setItem({...item,price:Number(event.target.value)})}/></div><div><Label>Categoría</Label><Select value={item.category} onValueChange={(value)=>setItem({...item,category:(value||"Termos") as Product["category"]})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{["Cups","Termos","Accesorios"].map((value)=><SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div><div><Label>Capacidad</Label><Input value={item.capacity} onChange={(event)=>setItem({...item,capacity:event.target.value})}/></div></div>
+      <Label>Descripción</Label><Textarea value={item.description} onChange={(event)=>setItem({...item,description:event.target.value})}/><div className="two-cols"><div><Label>Material</Label><Input value={item.material} onChange={(event)=>setItem({...item,material:event.target.value})}/></div><div><Label>Medidas</Label><Input value={item.measure} onChange={(event)=>setItem({...item,measure:event.target.value})}/></div></div>
+      <div className="editor-toggles"><label><Switch checked={item.active} onCheckedChange={(value)=>setItem({...item,active:value})}/> Publicado</label><label><Switch checked={item.featured} onCheckedChange={(value)=>setItem({...item,featured:value})}/> Destacado</label><label><Switch checked={item.customizable} onCheckedChange={(value)=>setItem({...item,customizable:value})}/> Permite grabado</label></div>
+      <div className="variant-editor"><div className="variant-editor-head"><div><Label>Fotos por color y stock</Label><p>La foto unitaria aparecerá cuando el cliente seleccione ese color.</p></div><Button type="button" variant="outline" size="sm" onClick={()=>setItem({...item,colors:[...item.colors,{name:"",stock:0}]})}><Plus/> Añadir color</Button></div>
+        {item.colors.map((color,index)=><div className="variant-row" key={`${index}-${color.name}`}><div className="variant-thumb">{color.image?<img src={color.image} alt=""/>:<span>Sin foto</span>}</div><Input value={color.name} onChange={(event)=>updateColor(index,{name:event.target.value})} placeholder="Color"/><Input type="number" min="0" value={color.stock} onChange={(event)=>updateColor(index,{stock:Number(event.target.value)})} aria-label={`Stock ${color.name}`}/><label className="variant-upload"><ImagePlus/>{uploading===String(index)?"…":"Foto"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event)=>event.target.files?.[0]&&upload(event.target.files[0],index)}/></label><button type="button" className="variant-remove" onClick={()=>setItem({...item,colors:item.colors.filter((_,i)=>i!==index)})}><Trash2/></button></div>)}
+      </div>{error&&<p className="form-error">{error}</p>}<div className="editor-actions"><Button type="button" variant="outline" onClick={onClose}>Cancelar</Button><Button type="button" onClick={save} disabled={saving}>{saving?"Guardando…":"Guardar producto"}</Button></div>
+    </div></div></DialogContent></Dialog>;
+}
