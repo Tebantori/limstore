@@ -10,7 +10,7 @@ import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
 import type { Product } from "../lib/catalog";
-import { engravingFonts, engravingIcons } from "../lib/catalog";
+import { engravingFonts, engravingIcons, seedProducts } from "../lib/catalog";
 import { ProductDialogV2, VariantProductImage as VariantVisual } from "./product-dialog-v2";
 
 export type CartItem = { key:string; sku:string; name:string; price:number; engravingFee?:number; image:string; quantity:number; color:string; engraving:string; font:string; icon:string };
@@ -18,34 +18,45 @@ type Settings = Record<string,string>;
 const money=(value:number)=>new Intl.NumberFormat("es-PE",{style:"currency",currency:"PEN"}).format(value);
 
 export function Storefront() {
-  const [products,setProducts]=useState<Product[]>([]); const [settings,setSettings]=useState<Settings>({shipping_lima:"10",shipping_province:"10"});
-  const [loading,setLoading]=useState(true); const [category,setCategory]=useState("Todos"); const [search,setSearch]=useState("");
+  const [products,setProducts]=useState<Product[]>(seedProducts); const [settings,setSettings]=useState<Settings>({shipping_lima:"10",shipping_province:"10",engraving_price:"5"});
+  const [loading,setLoading]=useState(false); const [category,setCategory]=useState("Todos"); const [search,setSearch]=useState("");
   const [selected,setSelected]=useState<Product|null>(null); const [cartOpen,setCartOpen]=useState(false); const [checkoutOpen,setCheckoutOpen]=useState(false);
   const [cart,setCart]=useState<CartItem[]>([]); const [notice,setNotice]=useState("");
-  useEffect(()=>{ const saved=localStorage.getItem("lim-cart"); if(saved) setCart(JSON.parse(saved)); fetch("/api/catalog").then(r=>r.json()).then(d=>{if(d.products)setProducts(d.products);if(d.settings)setSettings(d.settings)}).finally(()=>setLoading(false)); },[]);
+  useEffect(()=>{
+    const saved=localStorage.getItem("lim-cart");
+    if(saved) { try { setCart(JSON.parse(saved)); } catch { localStorage.removeItem("lim-cart"); } }
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),8000);
+    fetch("/api/catalog",{signal:controller.signal})
+      .then(r=>r.ok?r.json():Promise.reject(new Error("Catálogo remoto no disponible")))
+      .then(d=>{if(Array.isArray(d.products)&&d.products.length)setProducts(d.products);if(d.settings)setSettings(current=>({...current,...d.settings}))})
+      .catch(()=>{})
+      .finally(()=>clearTimeout(timeout));
+    return()=>{clearTimeout(timeout);controller.abort()};
+  },[]);
   useEffect(()=>{localStorage.setItem("lim-cart",JSON.stringify(cart))},[cart]);
   const filtered=useMemo(()=>products.filter(p=>(category==="Todos"||p.category===category)&&(`${p.name} ${p.capacity}`.toLowerCase().includes(search.toLowerCase()))),[products,category,search]);
   const cartCount=cart.reduce((s,i)=>s+i.quantity,0); const subtotal=cart.reduce((s,i)=>s+(i.price+(i.engravingFee||0))*i.quantity,0);
   const add=(item:CartItem)=>{setCart(old=>{const hit=old.find(i=>i.key===item.key);return hit?old.map(i=>i.key===item.key?{...i,quantity:i.quantity+item.quantity}:i):[...old,item]});setSelected(null);setCartOpen(true);setNotice(`${item.name} se agregó a tu bolsa`);setTimeout(()=>setNotice(""),2600)};
   const updateQty=(key:string,delta:number)=>setCart(old=>old.map(i=>i.key===key?{...i,quantity:Math.max(0,i.quantity+delta)}:i).filter(i=>i.quantity>0));
   return <div className="min-h-screen bg-[var(--cream)] text-[var(--ink)]">
-    <div className="announcement">Envíos a todo el Perú <span>·</span> Recojo gratuito en Ate <span>·</span> Grabado permanente incluido</div>
-    <header className="site-header"><a href="#inicio" className="brand"><img src="/images/brand/lim-wordmark.png" alt="LIM"/></a>
+    <div className="announcement">Envíos a todo el Perú <span>·</span> Recojo gratuito en Ate <span>·</span> Grabado personalizado disponible</div>
+    <header className="site-header"><a href="#inicio" className="brand"><img src="/images/brand/lim-logo.png" alt="LIM Collection 2026"/></a>
       <nav className="desktop-nav"><a href="#catalogo">Comprar</a><a href="#personaliza">Personaliza</a><a href="#nosotros">Nuestra esencia</a></nav>
       <div className="header-actions"><a aria-label="Instagram" href="https://www.instagram.com/limshop.pe/" target="_blank"><Camera size={20}/></a><a aria-label="TikTok" href="https://www.tiktok.com/@limshop.pe" target="_blank"><Music2 size={20}/></a><Sheet open={cartOpen} onOpenChange={setCartOpen}><SheetTrigger render={<button className="bag-button" aria-label={`Bolsa con ${cartCount} productos`}><ShoppingBag size={20}/><span>{cartCount}</span></button>}/><CartPanel cart={cart} subtotal={subtotal} onQty={updateQty} onCheckout={()=>{setCartOpen(false);setCheckoutOpen(true)}}/></Sheet><button className="mobile-menu" aria-label="Menú"><Menu/></button></div>
     </header>
     <main>
       <section id="inicio" className="hero"><div className="hero-copy"><p className="eyebrow">TERMOS QUE HABLAN DE TI</p><h1>Hay mucho<br/><em>por vivir.</em></h1><p>Diseñamos compañeros de todos los días: duraderos, lindos y personalizados con aquello que te mueve.</p><a className="primary-link" href="#catalogo">Encuentra tu LIM <span>→</span></a><div className="hero-proof"><span><ShieldCheck/> Acero premium</span><span><Sparkles/> Grabado incluido</span></div></div><div className="hero-image"><img src="/images/brand/lim-hero.jpg" alt="Termo LIM rosa personalizado"/><div className="hero-sticker">HECHO<br/><strong>PARA TI</strong></div></div></section>
-      <section className="benefits"><div><Truck/><span><strong>Envíos nacionales</strong>Olva, Shalom o motorizado</span></div><div><Sparkles/><span><strong>Personalización incluida</strong>Un nombre que dura contigo</span></div><div><PackageCheck/><span><strong>Compra protegida</strong>Seguimiento de tu pedido</span></div></section>
+      <section className="benefits"><div><Truck/><span><strong>Envíos nacionales</strong>Olva, Shalom o motorizado</span></div><div><Sparkles/><span><strong>Grabado personalizado</strong>Desde {money(Number(settings.engraving_price)||5)}</span></div><div><PackageCheck/><span><strong>Compra protegida</strong>Seguimiento de tu pedido</span></div></section>
       <section id="catalogo" className="catalog-section"><div className="section-heading"><div><p className="eyebrow">CATÁLOGO 2026</p><h2>Elige tu compañero</h2></div><p>Del primer café al último entrenamiento. Hay un LIM para cada forma de vivir.</p></div>
         <div className="catalog-tools"><div className="categories">{["Todos","Cups","Termos","Accesorios"].map(c=><button key={c} className={category===c?"active":""} onClick={()=>setCategory(c)}>{c}</button>)}</div><label className="search"><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar modelo o capacidad"/></label></div>
         {loading?<div className="loading-grid">{[1,2,3,4].map(i=><div key={i}/>)}</div>:<div className="product-grid">{filtered.map(p=><article className="product-card" key={p.sku}><button onClick={()=>setSelected(p)} className="product-image"><VariantVisual product={p} color={p.colors.find(c=>c.stock>0)?.name||p.colors[0]?.name}/>{p.featured&&<span className="tag">Favorito LIM</span>}<span className="quick">Elegir color</span></button><div className="product-info"><div><p>{p.category} · {p.capacity}</p><h3>{p.name.replace(` ${p.capacity}`,"")}</h3></div><strong>{money(p.price)}</strong></div><div className="swatches">{p.colors.slice(0,5).map(c=><span key={c.name} title={`${c.name}${c.stock?"":" · Agotado"}`} className={`${colorClass(c.name)} ${c.stock?"":"out"}`}/>) }{p.colors.length>5&&<small>+{p.colors.length-5}</small>}</div></article>)}</div>}
       </section>
-      <section id="personaliza" className="personalize"><div className="personalize-image"><img src="/images/brand/lim-story.jpg" alt="Cup LIM personalizado en un momento cotidiano"/></div><div className="personalize-copy"><p className="eyebrow">HAZLO TUYO</p><h2>Tu nombre.<br/>Tu historia.<br/><em>Tu LIM.</em></h2><p>Personalizamos tu termo con grabado permanente. Elige nombre, tipografía e ícono sin costo adicional.</p><ol><li><span>01</span>Elige tu modelo y color</li><li><span>02</span>Escribe el nombre</li><li><span>03</span>Nosotros hacemos la magia</li></ol><a href="#catalogo" className="text-link">Empezar a personalizar →</a></div></section>
+      <section id="personaliza" className="personalize"><div className="personalize-image"><img src="/images/brand/lim-story.jpg" alt="Cup LIM personalizado en un momento cotidiano"/></div><div className="personalize-copy"><p className="eyebrow">HAZLO TUYO</p><h2>Tu idea.<br/>Tu historia.<br/><em>Tu LIM.</em></h2><p>Añade un grabado permanente por {money(Number(settings.engraving_price)||5)}. Puede ser un nombre, una fecha, una palabra o una frase corta.</p><ol><li><span>01</span>Elige tu modelo y color</li><li><span>02</span>Escribe el texto que deseas</li><li><span>03</span>Nosotros hacemos la magia</li></ol><a href="#catalogo" className="text-link">Empezar a personalizar →</a></div></section>
       <section id="nosotros" className="manifesto"><p>Creemos en elegir objetos que duren, regalar con intención y encontrar belleza en lo cotidiano.</p><strong>VIVE CON INTENCIÓN · VIVE LIM</strong></section>
       <section className="corporate"><div><p className="eyebrow">PARA EQUIPOS Y EVENTOS</p><h2>Tu marca también puede vivir en un LIM.</h2><p>Pedidos corporativos personalizados con atención directa.</p></div><a href="https://wa.me/51969961922?text=Hola%20LIM,%20quisiera%20cotizar%20un%20pedido%20corporativo" target="_blank" className="outline-link">Cotizar pedido corporativo</a></section>
     </main>
-    <footer><div className="footer-brand"><img src="/images/brand/lim-wordmark.png" alt="LIM"/><p>Hay mucho por vivir.</p></div><div><strong>Explora</strong><a href="#catalogo">Catálogo</a><a href="#personaliza">Personalización</a><a href="/admin">Administrar tienda</a></div><div><strong>Contacto y redes</strong><a href="tel:+51969961922">969 961 922</a><a href="https://www.instagram.com/limshop.pe/" target="_blank">Instagram · @limshop.pe</a><a href="https://www.tiktok.com/@limshop.pe" target="_blank">TikTok · @limshop.pe</a></div><div className="footer-end">© 2026 LIM Shop Perú · Lima, Perú</div></footer>
+    <footer><div className="footer-brand"><img src="/images/brand/lim-logo.png" alt="LIM Collection 2026"/><p>Hay mucho por vivir.</p></div><div><strong>Explora</strong><a href="#catalogo">Catálogo</a><a href="#personaliza">Personalización</a><a href="/admin">Administrar tienda</a></div><div><strong>Contacto y redes</strong><a href="tel:+51969961922">969 961 922</a><a href="https://www.instagram.com/limshop.pe/" target="_blank">Instagram · @limshop.pe</a><a href="https://www.tiktok.com/@limshop.pe" target="_blank">TikTok · @limshop.pe</a></div><div className="footer-end">© 2026 LIM Shop Perú · Lima, Perú</div></footer>
     <ProductDialogV2 product={selected} engravingPrice={Number(settings.engraving_price)||5} onClose={()=>setSelected(null)} onAdd={add}/>
     <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} cart={cart} subtotal={subtotal} settings={settings} onComplete={()=>setCart([])}/>
     {notice&&<div className="toast"><Check size={17}/>{notice}</div>}
